@@ -18,7 +18,6 @@ db_params = {
     "host": "127.0.0.1",
 }
 
-
 class PersonInput(BaseModel):
     wfirst_name: str
     wlast_name: str
@@ -48,45 +47,11 @@ def root(sort_column, sort_order):
 
     sortParams.sort_column = sort_column
     sortParams.sort_order = sort_order
-
     
     people = get_people(sortParams)
     fields = ['first_name', 'last_name', 'address', 'birthdate']
-
-    sort = sort_order = "asc" if sort_order != "asc" else "desc"
-
-    '''
-     sort = sort_order
-    if sort != "asc":
-        sort = "asc"
-    else:
-        sort = "desc"
-
-    default_sort_order = "asc"  # По умолчанию сортируем по возрастанию
-    if sort_column != "first_name" and sort_column != "last_name" and sort_column != "address" and sort_column != "birthdate":
-        default_sort_order = "asc"
-
-    #sort = sort_order = "asc" if sort_order != "asc" else "desc"
-
-   sort = sort_order
-    if sort != "asc":
-        sort = "asc"
-    else:
-        sort = "desc"
-
-    if sort_column != 'last_name' and sort_column != 'address' and sort_column != 'birthdate':
-        sort = "asc" if sort_order == "desc" else "desc"    
-    elif sort_column != 'first_name' and sort_column != 'address' and sort_column != 'birthdate':
-        sort = "asc" if sort_order != "asc" else "desc" 
-    elif sort_column == 'address'and sort!='asc':
-        sort = "asc" if sort_order != "asc" else "desc" 
-    elif sort_column == 'birthdate'and sort!='asc':
-        sort = "asc" if sort_order != "asc" else "desc" 
-
-
-    #sort = sort_order = "asc" if sort_order != "asc" else "desc"
-    '''
-    
+    sort = sort_order 
+           
     result = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -100,19 +65,11 @@ def root(sort_column, sort_order):
          <body>
           <table border="1" bordercolor="grey">
     """
-           #<tr>
-                # <th><a href="http://127.0.0.1:8000/first_name/{sort}">Имя</a></th>
-                # <th><a href="http://127.0.0.1:8000/last_name/{sort}">Фамилия</a></th>
-                # <th><a href="http://127.0.0.1:8000/address/{sort}">Адрес</a></th>
-                # <th><a href="http://127.0.0.1:8000/birthdate/{sort}">Дата рождения</a></th>
-                #<th>Действие</th>
-            #</tr>
 
-
-    result = (result+ f"""<tr><th><a href='http://127.0.0.1:8000/{fields[0]}/{sort}'>Имя</a></th>
-                 <th><a href='http://127.0.0.1:8000/{fields[1]}/{sort}'>Фамилия</a></th>
-                 <th><a href='http://127.0.0.1:8000/{fields[2]}/{sort}'>Адрес</a></th>
-                 <th><a href='http://127.0.0.1:8000/{fields[3]}/{sort}'>Дата рождения</a></th>
+    result = (result+ f"""<tr><th><a href='http://127.0.0.1:8000/{fields[0]}/{"desc" if sort_column== fields[0] and sort == "asc" else "asc"}'>Имя</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[1]}/{"desc" if sort_column== fields[1] and sort == "asc" else "asc"}'>Фамилия</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[2]}/{"desc" if sort_column== fields[2] and sort == "asc" else "asc"}'>Адрес</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[3]}/{"desc" if sort_column== fields[3] and sort == "asc" else "asc"}'>Дата рождения</a></th>
                 <th>Действие</th>
             </tr>"""
         )
