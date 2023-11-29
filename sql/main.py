@@ -1,9 +1,10 @@
 from datetime import date
+from typing import Optional
 import psycopg2
 from psycopg2 import sql
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from pydantic import BaseModel, validator, root_validator
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi import Depends
 
 app = FastAPI()
@@ -25,16 +26,68 @@ class PersonInput(BaseModel):
     wbirthdate: date
 
 
+class SortParams(BaseModel):
+    sort_column: Optional[str] = None
+    sort_order: Optional[str] = None
+
+
 # Функция для создания подключения к базе данных
 def create_connection():
     connection = psycopg2.connect(**db_params)
     return connection
 
 
-@app.get("/")
-async def root():
-    people = get_people()
-    result = """<!DOCTYPE html>
+@app.get("/", response_class=HTMLResponse)
+async def main():
+    return root("staff_id", "asc")
+
+
+@app.get("/{sort_column}/{sort_order}", response_class=HTMLResponse)
+def root(sort_column, sort_order):
+    sortParams = SortParams()
+
+    sortParams.sort_column = sort_column
+    sortParams.sort_order = sort_order
+
+    
+    people = get_people(sortParams)
+    fields = ['first_name', 'last_name', 'address', 'birthdate']
+
+    sort = sort_order = "asc" if sort_order != "asc" else "desc"
+
+    '''
+     sort = sort_order
+    if sort != "asc":
+        sort = "asc"
+    else:
+        sort = "desc"
+
+    default_sort_order = "asc"  # По умолчанию сортируем по возрастанию
+    if sort_column != "first_name" and sort_column != "last_name" and sort_column != "address" and sort_column != "birthdate":
+        default_sort_order = "asc"
+
+    #sort = sort_order = "asc" if sort_order != "asc" else "desc"
+
+   sort = sort_order
+    if sort != "asc":
+        sort = "asc"
+    else:
+        sort = "desc"
+
+    if sort_column != 'last_name' and sort_column != 'address' and sort_column != 'birthdate':
+        sort = "asc" if sort_order == "desc" else "desc"    
+    elif sort_column != 'first_name' and sort_column != 'address' and sort_column != 'birthdate':
+        sort = "asc" if sort_order != "asc" else "desc" 
+    elif sort_column == 'address'and sort!='asc':
+        sort = "asc" if sort_order != "asc" else "desc" 
+    elif sort_column == 'birthdate'and sort!='asc':
+        sort = "asc" if sort_order != "asc" else "desc" 
+
+
+    #sort = sort_order = "asc" if sort_order != "asc" else "desc"
+    '''
+    
+    result = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -46,16 +99,27 @@ async def root():
          </head> 
          <body>
           <table border="1" bordercolor="grey">
-           <tr>
-                <th>Имя</th>
-                <th>Фамилия</th>
-                <th>Адрес</th>
-                <th>Дата рождения</th>
+    """
+           #<tr>
+                # <th><a href="http://127.0.0.1:8000/first_name/{sort}">Имя</a></th>
+                # <th><a href="http://127.0.0.1:8000/last_name/{sort}">Фамилия</a></th>
+                # <th><a href="http://127.0.0.1:8000/address/{sort}">Адрес</a></th>
+                # <th><a href="http://127.0.0.1:8000/birthdate/{sort}">Дата рождения</a></th>
+                #<th>Действие</th>
+            #</tr>
+
+
+    result = (result+ f"""<tr><th><a href='http://127.0.0.1:8000/{fields[0]}/{sort}'>Имя</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[1]}/{sort}'>Фамилия</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[2]}/{sort}'>Адрес</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[3]}/{sort}'>Дата рождения</a></th>
                 <th>Действие</th>
-            </tr>
-"""
+            </tr>"""
+        )
+
     for p in people:
-        formatted_date = p[4].strftime("%d-%m-%Y")
+        if p[4]:
+            formatted_date = p[4].strftime("%d-%m-%Y")
         result = (
             result
             + "<tr><td>"
@@ -66,7 +130,11 @@ async def root():
             + p[3]
             + "</td><td>"
             + formatted_date
-            + "<td><button type='submit'>Редактировать</button><button type='submit'>Удалить</button></td></tr>"
+            + "<td><form action='/show_person/"
+            + str(p[0])
+            + "' method='post'><button type='submit'>Редактировать</button></form><form action='/del_person/"
+            + str(p[0])
+            + "' method='post'><button type='submit'>Удалить</button></form></td></tr>"
         )
     result = (
         result
@@ -86,7 +154,7 @@ async def root():
                 <td> <input type="text" id="wfirst_name" name="wfirst_name" required></td>
                 <td> <input type="text" id="wlast_name" name="wlast_name" required></td>
                 <td> <input type="text" id="waddress" name="waddress" required></td>
-                <td> <input type="text" id="wbirthdate" name="wbirthdate" required></td>
+                <td> <input type="date" id="wbirthdate" name="wbirthdate" required></td>
                 <td><button name="badd" type='submit'>Добавить</button></td>
             </tr>
           </table>       
@@ -97,14 +165,19 @@ async def root():
     return HTMLResponse(content=result, status_code=200)
 
 
-# @app.get("/get_people")
-def get_people():
+@app.get("/get_people")
+def get_people(sort_params: SortParams):
     connection = create_connection()
     cursor = connection.cursor()
 
-    select_query = """
-        SELECT * FROM staff ORDER BY staff_id;
-    """
+    sort_column = sort_params.sort_column
+    sort_order = sort_params.sort_order
+    print(sort_column)
+    print(sort_order)
+    if sort_column and sort_order:
+        select_query = f"SELECT * FROM staff ORDER BY {sort_column} {sort_order};"
+    else:
+        select_query = "SELECT * FROM staff ORDER BY staff_id;"
 
     cursor.execute(select_query)
     people = cursor.fetchall()
@@ -115,35 +188,51 @@ def get_people():
     return people
 
 
-@app.post("/add_person")
-def add_person(person_data: PersonInput = Depends()):
+def get_person(staff_id):
     connection = create_connection()
     cursor = connection.cursor()
-    print (person_data.wfirst_name)
-    print (person_data.wlast_name)
-    print (person_data.waddress)
-    print (person_data.wbirthdate)
+
+    select_query = "SELECT * FROM staff where staff_id = " + str(staff_id) + ";"
+
+    cursor.execute(select_query)
+    person = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return person
+
+
+@app.post("/add_person")
+def add_person(
+    wfirst_name: str = Form(...),
+    wlast_name: str = Form(...),
+    waddress: str = Form(...),
+    wbirthdate: date = Form(...),
+):
+    connection = create_connection()
+    cursor = connection.cursor()
 
     insert_query = sql.SQL(
         """
         INSERT INTO staff (first_name, last_name, address, birthdate)
-        VALUES ({wfirst_name}, {wlast_name}, {waddress}, {wbirthdate});
+        VALUES (%s, %s, %s, %s);
         """
-    ).format(
-        first_name=sql.Literal(person_data.wfirst_name),
-        last_name=sql.Literal(person_data.wlast_name),
-        address=sql.Literal(person_data.waddress),
-        birthdate=sql.Literal(person_data.wbirthdate),
     )
 
-    cursor.execute(insert_query)
+    cursor.execute(
+        insert_query,
+        (wfirst_name, wlast_name, waddress, wbirthdate),
+    )
 
     connection.commit()
     cursor.close()
     connection.close()
+    response = RedirectResponse("/", status_code=303)
+    return response
 
 
-@app.post("/del_person")
+@app.post("/del_person/{staff_id}")
 def del_person(staff_id):
     connection = create_connection()
     cursor = connection.cursor()
@@ -155,31 +244,73 @@ def del_person(staff_id):
     connection.commit()
     cursor.close()
     connection.close()
+    response = RedirectResponse("/", status_code=303)
+    return response
 
 
-def edit_people(staff_id, wfirst_name, wlast_name, waddress, wbirthdate):
+@app.post("/edit_person/{staff_id}")
+def edit_people(
+    staff_id,
+    ufirst_name: str = Form(...),
+    ulast_name: str = Form(...),
+    uaddress: str = Form(...),
+    ubirthdate: date = Form(...),
+):
     connection = create_connection()
     cursor = connection.cursor()
 
     update_query = sql.SQL(
-        """
-        UPDATE staff 
-        SET first_name = {wfirst_name}, last_name = {wlast_name}, address = {waddress}, birthdate = {wbirthdate}
-        WHERE staff_id = {staff_id};
-    """
-    ).format(
-        wfirst_name=sql.Literal(wfirst_name),
-        wlast_name=sql.Literal(wlast_name),
-        waddress=sql.Literal(waddress),
-        wbirthdate=sql.Literal(wbirthdate),
-        staff_id=sql.Literal(staff_id),
+        f"UPDATE staff "
+        f"SET first_name = '{ufirst_name}', last_name = '{ulast_name}', address = '{uaddress}', birthdate = '{ubirthdate}' "
+        f"WHERE staff_id = {staff_id};"
     )
-
-    cursor.execute(update_query)
+    cursor.execute(
+        update_query,
+        (ufirst_name, ulast_name, uaddress, ubirthdate),
+    )
 
     connection.commit()
     cursor.close()
     connection.close()
+    response = RedirectResponse("/", status_code=303)
+    return response
+
+
+@app.post("/show_person/{staff_id}", response_class=HTMLResponse)
+def show_person(staff_id):
+    person = get_person(staff_id)
+    print(person)
+    print(person[0][3])
+    result = (
+        f"<!DOCTYPE html>"
+        f"<html lang='en'>"
+        f"<head>"
+        f"<meta charset='UTF-8'>"
+        f"<title><Program></title>"
+        f"</head>"
+        f"<body>"
+        f"<h2>Редактирование данных сотрудника</h2>"
+        f" </style>"
+        f" </head> "
+        f" <body>"
+        f"  <table border='1' bordercolor='grey'>"
+        f" <form action='/edit_person/{staff_id}' method='post'>"
+        f" <table border='1' bordercolor='grey'>"
+        f"   <tr>"
+        f"   <th>Имя</th>"
+        f"   <th>Фамилия</th>"
+        f"   <th>Адрес</th>"
+        f"   <th>Дата рождения</th>"
+        f"   <th>Действие</th>"
+        f" </tr>"
+        f" <tr>"
+        f" <td> <input type='text' value='{person[0][1]}' id='ufirst_name' name='ufirst_name' required></td>"
+        f" <td> <input type='text' value='{person[0][2]}' id='ulast_name' name='ulast_name' required></td>"
+        f"<td> <input type='text' value='{person[0][3]}' id='uaddress' name='uaddress' required></td>"
+        f"<td> <input type='date' value='{person[0][4]}' id='ubirthdate' name='ubirthdate' required></td>"
+        f" <td><button name='uadd' type='submit'>Подтвердить изменения</button></td></tr></table></form>"
+    )
+    return HTMLResponse(content=result, status_code=200)
 
 
 '''
