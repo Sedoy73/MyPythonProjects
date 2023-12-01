@@ -1,11 +1,12 @@
 from datetime import date
 from typing import Optional
 import psycopg2
-from psycopg2 import sql
+from psycopg2 import Date, sql
 from fastapi import FastAPI, Form
-from pydantic import BaseModel, validator, root_validator
+from pydantic import BaseModel  # , validator, root_validator
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi import Depends
+
+# from fastapi import Depends
 
 app = FastAPI()
 
@@ -18,6 +19,7 @@ db_params = {
     "host": "127.0.0.1",
 }
 
+
 class PersonInput(BaseModel):
     wfirst_name: str
     wlast_name: str
@@ -25,33 +27,121 @@ class PersonInput(BaseModel):
     wbirthdate: date
 
 
+class PersonFind(BaseModel):
+    ffirst_name: str
+    flast_name: str
+    faddress: str
+    fbirthdate: date
+
+
 class SortParams(BaseModel):
     sort_column: Optional[str] = None
     sort_order: Optional[str] = None
 
 
-# Функция для создания подключения к базе данных
+class SearchParams(BaseModel):
+    ffirst_name: Optional[str] = None
+    flast_name: Optional[str] = None
+    faddress: Optional[str] = None
+    # fbirthdate: Optional[Date] = None
+
+
 def create_connection():
     connection = psycopg2.connect(**db_params)
     return connection
 
 
+@app.get("/get_people")
+def get_people(sort_params: SortParams, searchParams: SearchParams):
+    connection = create_connection()
+    cursor = connection.cursor()
+
+    sort_column = sort_params.sort_column
+    sort_order = sort_params.sort_order
+
+    ffirst_name = searchParams.ffirst_name
+    flast_name = searchParams.flast_name
+    faddress = searchParams.faddress
+
+    '''
+    if ffirst_name!='None':
+        select_query = f"SELECT * FROM staff WHERE first_name iLIKE '%{ffirst_name}%';"
+    elif flast_name !='None':
+        select_query = f"SELECT * FROM staff WHERE flast_name iLIKE '%{flast_name}%';"
+    elif faddress !='None':
+        select_query = f"SELECT * FROM staff WHERE faddress iLIKE '%{faddress}%';"       
+    elif ffirst_name !='None' and flast_name !='None' and faddress !='None':
+        select_query = f"""SELECT * FROM staff WHERE first_name iLIKE '%{ffirst_name}%'
+        AND flast_name iLIKE '%{flast_name}%'
+        AND faddress iLIKE '%{faddress}%';"""'''
+
+    # elif sort_column!='None' and sort_order!='None':
+    # select_query = f"SELECT * FROM staff ORDER BY {sort_column} {sort_order};"
+
+    if (
+        sort_column == "staff_id"
+        and sort_order == "asc"
+        and ffirst_name == None
+        and flast_name == None
+        and faddress == None
+    ):
+        select_query = "SELECT * FROM staff ORDER BY staff_id;"
+    elif ffirst_name != None:
+        select_query = f"SELECT * FROM staff WHERE first_name iLIKE '%{ffirst_name}%' AND last_name iLIKE '%{flast_name}%' AND address iLIKE '%{faddress}%';"
+
+    cursor.execute(select_query)
+    people = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return people
+
+
 @app.get("/", response_class=HTMLResponse)
-async def main():
-    return root("staff_id", "asc")
+async def main(
+    ffirst_name: str | None = None,
+    flast_name: str | None = None,
+    faddress: str | None = None,
+):
+    return root("staff_id", "asc", ffirst_name, flast_name, faddress)
 
 
-@app.get("/{sort_column}/{sort_order}", response_class=HTMLResponse)
-def root(sort_column, sort_order):
+@app.get(
+    "/{sort_column}/{sort_order}/{ffirst_name}/{flast_name}/{faddress}",
+    response_class=HTMLResponse,
+)
+def root(
+    sort_column,
+    sort_order,
+    ffirst_name: str | None = None,
+    flast_name: str | None = None,
+    faddress: str | None = None,
+):
     sortParams = SortParams()
-
     sortParams.sort_column = sort_column
     sortParams.sort_order = sort_order
-    
-    people = get_people(sortParams)
-    fields = ['first_name', 'last_name', 'address', 'birthdate']
-    sort = sort_order 
-           
+
+    searchParams = SearchParams()
+    searchParams.ffirst_name = ffirst_name
+    searchParams.flast_name = flast_name
+    searchParams.faddress = faddress
+
+    """print(ffirst_name)
+    print(flast_name)
+    print(faddress)"""
+
+    people = get_people(sortParams, searchParams)
+
+    print(sort_column)
+    print(sort_order)
+    print(ffirst_name)
+    print(flast_name)
+    print(faddress)
+
+    fields = ["first_name", "last_name", "address", "birthdate"]
+    sort = sort_order
+
     result = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -59,6 +149,24 @@ def root(sort_column, sort_order):
     <title><Program></title>
 </head>
 <body>
+    <h2>Поиск сотрудников</h2>
+    <form action="/" method="get">
+          <table border="1" bordercolor="grey">
+           <tr>
+                 <th>Имя</th>
+                 <th>Фамилия</th>
+                 <th>Адрес</th>
+                 <th>Действие</th>
+           </tr>
+           <tr>
+                <td> <input type="text" id="ffirst_name" name="ffirst_name"></td>
+                <td> <input type="text" id="flast_name" name="flast_name"></td>
+                <td> <input type="text" id="faddress" name="faddress"></td>
+                <td><button name="fbtn" type='submit'>Поиск</button><button type='reset'>Сброс</button></td>
+            </tr>
+          </table>       
+    </form>
+
     <h2>Таблица данных сотрудников</h2>
          </style>
          </head> 
@@ -66,13 +174,15 @@ def root(sort_column, sort_order):
           <table border="1" bordercolor="grey">
     """
 
-    result = (result+ f"""<tr><th><a href='http://127.0.0.1:8000/{fields[0]}/{"desc" if sort_column== fields[0] and sort == "asc" else "asc"}'>Имя</a></th>
-                 <th><a href='http://127.0.0.1:8000/{fields[1]}/{"desc" if sort_column== fields[1] and sort == "asc" else "asc"}'>Фамилия</a></th>
-                 <th><a href='http://127.0.0.1:8000/{fields[2]}/{"desc" if sort_column== fields[2] and sort == "asc" else "asc"}'>Адрес</a></th>
-                 <th><a href='http://127.0.0.1:8000/{fields[3]}/{"desc" if sort_column== fields[3] and sort == "asc" else "asc"}'>Дата рождения</a></th>
+    result = (
+        result
+        + f"""<tr><th><a href='http://127.0.0.1:8000/{fields[0]}/{"desc" if sort_column== fields[0] and sort == "asc" else "asc"}'>Имя</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[1]}/{"desc" if sort_column== fields[1] and sort == "asc" else "asc"}/{ffirst_name}/{flast_name}/{faddress}'>Фамилия</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[2]}/{"desc" if sort_column== fields[2] and sort == "asc" else "asc"}/{ffirst_name}/{flast_name}/{faddress}'>Адрес</a></th>
+                 <th><a href='http://127.0.0.1:8000/{fields[3]}/{"desc" if sort_column== fields[3] and sort == "asc" else "asc"}/{ffirst_name}/{flast_name}/{faddress}'>Дата рождения</a></th>
                 <th>Действие</th>
             </tr>"""
-        )
+    )
 
     for p in people:
         if p[4]:
@@ -87,7 +197,7 @@ def root(sort_column, sort_order):
             + p[3]
             + "</td><td>"
             + formatted_date
-            + "<td><form action='/show_person/"
+            + "<td><form action='/change_person/"
             + str(p[0])
             + "' method='post'><button type='submit'>Редактировать</button></form><form action='/del_person/"
             + str(p[0])
@@ -98,6 +208,8 @@ def root(sort_column, sort_order):
         + """
           </table>
           <p></p>
+
+    <h2>Добавление сотрудников</h2>
     <form action="/add_person" method="post">
           <table border="1" bordercolor="grey">
            <tr>
@@ -119,33 +231,11 @@ def root(sort_column, sort_order):
 </body>
 </html>"""
     )
+
     return HTMLResponse(content=result, status_code=200)
 
 
-@app.get("/get_people")
-def get_people(sort_params: SortParams):
-    connection = create_connection()
-    cursor = connection.cursor()
-
-    sort_column = sort_params.sort_column
-    sort_order = sort_params.sort_order
-    print(sort_column)
-    print(sort_order)
-    if sort_column and sort_order:
-        select_query = f"SELECT * FROM staff ORDER BY {sort_column} {sort_order};"
-    else:
-        select_query = "SELECT * FROM staff ORDER BY staff_id;"
-
-    cursor.execute(select_query)
-    people = cursor.fetchall()
-
-    cursor.close()
-    connection.close()
-
-    return people
-
-
-def get_person(staff_id):
+"""def get_person(staff_id):
     connection = create_connection()
     cursor = connection.cursor()
 
@@ -158,6 +248,7 @@ def get_person(staff_id):
     connection.close()
 
     return person
+"""
 
 
 @app.post("/add_person")
@@ -233,8 +324,8 @@ def edit_people(
     return response
 
 
-@app.post("/show_person/{staff_id}", response_class=HTMLResponse)
-def show_person(staff_id):
+@app.post("/change_person/{staff_id}", response_class=HTMLResponse)
+def change_person(staff_id):
     person = get_person(staff_id)
     print(person)
     print(person[0][3])
@@ -290,6 +381,39 @@ if __name__ == "__main__":
     print("Список людей:")
     for person in people_list:
         print(person)
+
+
+@app.get("/find_person")
+def find_person(searchParams: SearchParams):
+    connection = create_connection()
+    cursor = connection.cursor()
+
+    ffirst_name = searchParams.ffirst_name
+    flast_name = searchParams.flast_name
+    faddress = searchParams.faddress
+
+    print ('Find person' + ffirst_name)
+    print (flast_name)
+    print (faddress)
+    
+
+    if ffirst_name!='None':
+        select_query = f"SELECT * FROM staff WHERE first_name iLIKE '%{ffirst_name}%';"
+    elif flast_name !='None':
+        select_query = f"SELECT * FROM staff WHERE flast_name iLIKE '%{flast_name}%';"
+    elif faddress !='None':
+        select_query = f"SELECT * FROM staff WHERE faddress iLIKE '%{faddress}%';"       
+    elif ffirst_name !='None' and flast_name !='None' and faddress !='None':
+        select_query = f"""SELECT * FROM staff WHERE first_name iLIKE '%{ffirst_name}%'
+        AND flast_name iLIKE '%{flast_name}%'
+        AND faddress iLIKE '%{faddress}%';"""
+    
+    cursor.execute(select_query)
+
+    cursor.close()
+    connection.close()
+
+    return person
 
 # Функция для получения списка людей
 def get_people():
