@@ -32,10 +32,6 @@ class SortParams(BaseModel):
     sort_order: Optional[str] = None
 
 
-class SearchParams(BaseModel):
-    ffirst_name: Optional[str] = None
-    flast_name: Optional[str] = None
-    faddress: Optional[str] = None
 
 
 def create_connection():
@@ -44,35 +40,27 @@ def create_connection():
 
 
 @app.get("/get_people")
-def get_people(sort_params: SortParams, searchParams: SearchParams):
+def get_people(sort_params: SortParams):
     connection = create_connection()
     cursor = connection.cursor()
 
     sort_column = sort_params.sort_column
     sort_order = sort_params.sort_order
 
-    ffirst_name = searchParams.ffirst_name
-    flast_name = searchParams.flast_name
-    faddress = searchParams.faddress
+
 
     if (
         sort_column == "staff_id"
         and sort_order == "asc"
-        and ffirst_name == None
-        and flast_name == None
-        and faddress == None
+
     ):
         select_query = "SELECT * FROM staff ORDER BY staff_id;"
     elif (
         sort_column and sort_order
-        and ffirst_name == None
-        and flast_name == None
-        and faddress == None
+
     ):
         select_query = f"SELECT * FROM staff ORDER BY {sort_column if sort_column != None else 'staff_id'} {sort_order if sort_column != None else 'asc'};"
-    elif ffirst_name != None or flast_name!= None or faddress!= None:
-        select_query = f"SELECT * FROM staff WHERE first_name iLIKE '%{ffirst_name}%' AND last_name iLIKE '%{flast_name}%' AND address iLIKE '%{faddress}%' ORDER BY {sort_column if sort_column != None else 'staff_id'} {sort_order if sort_column != None else 'asc'};"
-
+    
     cursor.execute(select_query)
     people = cursor.fetchall()
 
@@ -88,7 +76,7 @@ async def main(
     flast_name: str | None = None,
     faddress: str | None = None,
 ):
-    return root("staff_id", "asc", ffirst_name, flast_name, faddress)
+    return root("staff_id", "asc")
 
 
 
@@ -98,27 +86,19 @@ async def main(
 )
 def root(
     sort_column,
-    sort_order,
-    ffirst_name: str | None = None,
-    flast_name: str | None = None,
-    faddress: str | None = None,
+    sort_order
 ):
     sortParams = SortParams()
     sortParams.sort_column = sort_column
     sortParams.sort_order = sort_order
 
-    searchParams = SearchParams()
-    searchParams.ffirst_name = ffirst_name
-    searchParams.flast_name = flast_name
-    searchParams.faddress = faddress
+    
 
-    people = get_people(sortParams, searchParams)
+    people = get_people(sortParams,)
 
     print(sort_column)
     print(sort_order)
-    print(ffirst_name)
-    print(flast_name)
-    print(faddress)
+  
 
     fields = ["first_name", "last_name", "address", "birthdate"]
     sort = sort_order
@@ -143,7 +123,7 @@ def root(
                 <td> <input type="text" id="ffirst_name" name="ffirst_name"></td>
                 <td> <input type="text" id="flast_name" name="flast_name"></td>
                 <td> <input type="text" id="faddress" name="faddress"></td>
-                <td><button name="fbtn" type='submit'>Поиск</button><button <a href="http://127.0.0.1:8000/"></a>Сброс</button></td>
+                <td><button name="fbtn" type='submit'>Поиск</button><button type='reset'>Сброс</button></td>
             </tr>
           </table>       
     </form>
@@ -216,7 +196,7 @@ def root(
     return HTMLResponse(content=result, status_code=200)
 
 
-def get_person(staff_id):
+"""def get_person(staff_id):
     connection = create_connection()
     cursor = connection.cursor()
 
@@ -229,7 +209,7 @@ def get_person(staff_id):
     connection.close()
 
     return person
-
+"""
 
 
 @app.post("/add_person")
